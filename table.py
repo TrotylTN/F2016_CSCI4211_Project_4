@@ -39,5 +39,5 @@ for x in range(1, 6):
         print 'Switch', x, 'State:', j // 2, j % 2, "// 0 means connected, 1 means down"
         k= sorted(a[x][j].keys())
         for t in k:
-            print t, ':', a[x][j][t]
+            print t, ':', a[x][j][t], len(t)
         print ''

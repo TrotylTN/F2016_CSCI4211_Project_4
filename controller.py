@@ -30,7 +30,53 @@ h5_MAC = EthAddr('00:00:00:00:00:05')
 h6_IP = IPAddr('10.0.0.6')
 h6_MAC = EthAddr('00:00:00:00:00:06')
 
-print "OK...."
+switch_state = 0
+
+link_state = {4:[0, 0, 0],
+              5:[0, 0, 0]}
+
+def gen_pair():
+    l = [[]]
+    for f in range(3):
+        l.append([])
+        l[f + 1].append(dict())
+        for i in range(1, 7):
+            if i < f * 2 + 1 or i > f * 2 + 2:
+                l[f + 1][0][('00:00:00:00:00:0' + str(f * 2 + 1), '00:00:00:00:00:0' + str(i))] = 1
+                l[f + 1][0][('00:00:00:00:00:0' + str(f * 2 + 2), '00:00:00:00:00:0' + str(i))] = 2
+            else:
+                l[f + 1][0]['00:00:00:00:00:0' + str(i)] = 3 + (i + 1) % 2
+    for f in range (4, 6):
+        l.append([])
+        l[f].append(dict())
+        for i in range(1, 7):
+            l[f][0]['00:00:00:00:00:0' + str(i)] = (i - 1) // 2 + 1
+    for f in range(3):
+        l[f + 1].append(dict())
+        for i in range(1, 7):
+            if i < f * 2 + 1 or i > f * 2 + 2:
+                l[f + 1][1][('00:00:00:00:00:0' + str(f * 2 + 1), '00:00:00:00:00:0' + str(i))] = 2
+                l[f + 1][1][('00:00:00:00:00:0' + str(f * 2 + 2), '00:00:00:00:00:0' + str(i))] = 2
+            else:
+                l[f + 1][1]['00:00:00:00:00:0' + str(i)] = 3 + (i + 1) % 2
+    for f in range(3):
+        l[f + 1].append(dict())
+        for i in range(1, 7):
+            if i < f * 2 + 1 or i > f * 2 + 2:
+                l[f + 1][2][('00:00:00:00:00:0' + str(f * 2 + 1), '00:00:00:00:00:0' + str(i))] = 1
+                l[f + 1][2][('00:00:00:00:00:0' + str(f * 2 + 2), '00:00:00:00:00:0' + str(i))] = 1
+            else:
+                l[f + 1][2]['00:00:00:00:00:0' + str(i)] = 3 + (i + 1) % 2
+    return l
+
+forwarding = (gen_pair())
+# for x in range(1, 6):
+#     for j in range(len(forwarding[x])):
+#         print 'Switch', x, 'State:', j // 2, j % 2, "// 0 means connected, 1 means down"
+#         k= sorted(forwarding[x][j].keys())
+#         for t in k:
+#             print t, ':', forwarding[x][j][t]
+#         print ''
 
 ARP_table = {}
 ARP_table[h1_IP] = h1_MAC
@@ -45,8 +91,6 @@ l2_forwarding = {}
 l3_forwarding = {}
 s4_forwarding = {}
 s5_forwarding = {}
-# forwarding = [l1_forwarding, l2_forwarding, l3]
-# l1_forwarding[(src, dst)] = port
 
 def generate():
   l1_forwarding[(h1_MAC, h2_MAC)] = 4
@@ -185,8 +229,6 @@ class topoDiscovery(EventMixin):
 
       packet = event.parsed
 
-      #'dump', 'err', 'find', 'hdr', 'hwdst', 'hwlen', 'hwsrc', 'hwtype', 'msg', 'next', 'opcode', 'pack', 'parse', 'parsed', 'payload', 'pre_hdr', 'prev', 'protodst', 'protolen', 'protosrc', 'prototype', 'raw', 'set_payload', 'unpack', 'warn']
-
       if isinstance(packet.payload, arp):
         print "GET ARP request"
         e = _handle_ARP_request(packet)
@@ -200,54 +242,72 @@ class topoDiscovery(EventMixin):
       #   print "ipv4", event.dpid
 
     def _handle_ConnectionUp(self, event):
-      print("Switch %d connected" % event.dpid)
-      if event.dpid == 1:
-        print("pid = 1")
-        for key in sorted(l1_forwarding):
+      # print("Switch %d connected" % event.dpid)
+      # if event.dpid == 1:
+      #   print("pid = 1")
+      #   for key in sorted(l1_forwarding):
+      #     msg = of.ofp_flow_mod()
+      #     msg.match.dl_src = key[0]
+      #     msg.match.dl_dst = key[1]
+      #     port = l1_forwarding[key]
+      #     msg.actions.append(of.ofp_action_output(port = port))
+      #     print "add rule 1"
+      #     event.connection.send(msg)
+      # elif event.dpid == 2:
+      #   for key in sorted(l2_forwarding):
+      #     msg = of.ofp_flow_mod()
+      #     msg.match.dl_src = key[0]
+      #     msg.match.dl_dst = key[1]
+      #     port = l2_forwarding[key]
+      #     msg.actions.append(of.ofp_action_output(port = port))
+      #     print "Add rule 2"
+      #     event.connection.send(msg)
+      # elif event.dpid == 3:
+      #   for key in sorted(l3_forwarding):
+      #     msg = of.ofp_flow_mod()
+      #     msg.match.dl_src = key[0]
+      #     msg.match.dl_dst = key[1]
+      #     port = l3_forwarding[key]
+      #     msg.actions.append(of.ofp_action_output(port = port))
+      #     event.connection.send(msg)
+      # elif event.dpid == 4:
+      #   for key in sorted(s4_forwarding):
+      #     msg = of.ofp_flow_mod()
+      #     msg.match.dl_dst = key
+      #     port = s4_forwarding[key]
+      #     msg.actions.append(of.ofp_action_output(port = port))
+      #     event.connection.send(msg)
+      # elif event.dpid == 5:
+      #   for key in sorted(s5_forwarding):
+      #     msg = of.ofp_flow_mod()
+      #     msg.match.dl_dst = key
+      #     port = s5_forwarding[key]
+      #     msg.actions.append(of.ofp_action_output(port = port))
+      #     event.connection.send(msg)
+      # else:
+      #   print("Error")
+      print("DPID:", event.dpid)
+      x = event.dpid
+      k = sorted(forwarding[x][switch_state].keys())
+      for t in k:
+        port = forwarding[x][switch_state][t]
+        if type(t) is str:
           msg = of.ofp_flow_mod()
-          msg.match.dl_src = key[0]
-          msg.match.dl_dst = key[1]
-          port = l1_forwarding[key]
+          msg.match.dl_dst = EthAddr(t)
+          print("Dest:", t, "port:", port)
           msg.actions.append(of.ofp_action_output(port = port))
-          print "add rule 1"
           event.connection.send(msg)
-      elif event.dpid == 2:
-        for key in sorted(l2_forwarding):
+        elif type(t) is tuple:
           msg = of.ofp_flow_mod()
-          msg.match.dl_src = key[0]
-          msg.match.dl_dst = key[1]
-          port = l2_forwarding[key]
-          msg.actions.append(of.ofp_action_output(port = port))
-          print "Add rule 2"
-          event.connection.send(msg)
-      elif event.dpid == 3:
-        for key in sorted(l3_forwarding):
-          msg = of.ofp_flow_mod()
-          msg.match.dl_src = key[0]
-          msg.match.dl_dst = key[1]
-          port = l3_forwarding[key]
+          msg.match.dl_src = EthAddr(t[0])
+          msg.match.dl_dst = EthAddr(t[1])
+          print("Src:", t[0], "Dest:", t[1], "port:", port)
           msg.actions.append(of.ofp_action_output(port = port))
           event.connection.send(msg)
-      elif event.dpid == 4:
-        for key in sorted(s4_forwarding):
-          msg = of.ofp_flow_mod()
-          msg.match.dl_dst = key
-          port = s4_forwarding[key]
-          msg.actions.append(of.ofp_action_output(port = port))
-          event.connection.send(msg)
-      elif event.dpid == 5:
-        for key in sorted(s5_forwarding):
-          msg = of.ofp_flow_mod()
-          msg.match.dl_dst = key
-          port = s5_forwarding[key]
-          msg.actions.append(of.ofp_action_output(port = port))
-          event.connection.send(msg)
-      else:
-        print("Error")
+      print ''
 
 def launch (disable_flood = False):
   global all_ports
   if disable_flood:
     all_ports = of.OFPP_ALL
-  generate()
   core.registerNew(topoDiscovery)
