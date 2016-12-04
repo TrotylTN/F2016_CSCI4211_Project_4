@@ -1,5 +1,3 @@
-
-
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 from pox.lib.packet.ipv4 import ipv4
@@ -10,7 +8,7 @@ from pox.lib.packet.ethernet import ethernet
 from pox.lib.revent import *  
 from pox.lib.recoco import Timer  
 from collections import defaultdict  
-from pox.openflow.discovery import Discovery  
+from pox.openflow.discovery import Discovery
 from pox.lib.util import dpid_to_str  
 import time
 
@@ -141,10 +139,6 @@ def _handle_ARP_request(packet):
   dst_MAC = ARP_table[dst_IP]
   print "New mac", dst_MAC
   r = arp()
-  #r.hwtype = r.HW_TYPE_ETHERNET
-  #r.prototype = r.PROTO_TYPE_IP
-  #r.hwlen = 6
-  #r.protolen = r.protolen
   r.opcode = arp.REPLY
   r.hwdst = src_MAC
   r.protodst = src_IP
@@ -153,71 +147,6 @@ def _handle_ARP_request(packet):
   e = ethernet(type=ethernet.ARP_TYPE, src=dst_MAC, dst=src_MAC)
   e.set_payload(r)
   return e
-  
-def _handle_ConnectionIn(event):
-  print("Switch %d connected" % event.dpid)
-  if event.dpid == 1:
-    print("pid = 1")
-    for key in sorted(l1_forwarding):
-      msg = of.ofp_flow_mod()
-      msg.match.dl_src = key[0]
-      msg.match.dl_dst = key[1]
-      port = l1_forwarding[key]
-      msg.actions.append(of.ofp_action_output(port = port))
-      print "add rule 1"
-      event.connection.send(msg)
-  elif event.dpid == 2:
-    for key in sorted(l2_forwarding):
-      msg = of.ofp_flow_mod()
-      msg.match.dl_src = key[0]
-      msg.match.dl_dst = key[1]
-      port = l2_forwarding[key]
-      msg.actions.append(of.ofp_action_output(port = port))
-      print "Add rule 2"
-      event.connection.send(msg)
-  elif event.dpid == 3:
-    for key in sorted(l3_forwarding):
-      msg = of.ofp_flow_mod()
-      msg.match.dl_src = key[0]
-      msg.match.dl_dst = key[1]
-      port = l3_forwarding[key]
-      msg.actions.append(of.ofp_action_output(port = port))
-      event.connection.send(msg)
-  elif event.dpid == 4:
-    for key in sorted(s4_forwarding):
-      msg = of.ofp_flow_mod()
-      msg.match.dl_dst = key
-      port = s4_forwarding[key]
-      msg.actions.append(of.ofp_action_output(port = port))
-      event.connection.send(msg)
-  elif event.dpid == 5:
-    for key in sorted(s5_forwarding):
-      msg = of.ofp_flow_mod()
-      msg.match.dl_dst = key
-      port = s5_forwarding[key]
-      msg.actions.append(of.ofp_action_output(port = port))
-      event.connection.send(msg)
-  else:
-    print("Error")
-
-  
-def _handle_PacketIn (event):
-
-  packet = event.parsed
-
-  #'dump', 'err', 'find', 'hdr', 'hwdst', 'hwlen', 'hwsrc', 'hwtype', 'msg', 'next', 'opcode', 'pack', 'parse', 'parsed', 'payload', 'pre_hdr', 'prev', 'protodst', 'protolen', 'protosrc', 'prototype', 'raw', 'set_payload', 'unpack', 'warn']
-
-  if isinstance(packet.payload, arp):
-    print "GET ARP request"
-    e = _handle_ARP_request(packet)
-    msg = of.ofp_packet_out()
-    msg.data = e.pack()
-    msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
-    msg.in_port = event.port
-    event.connection.send(msg)
-    
-  # elif isinstance(packet.next, ipv4):
-  #   print "ipv4", event.dpid
 
 class topoDiscovery(EventMixin):
 
@@ -227,6 +156,7 @@ class topoDiscovery(EventMixin):
             core.openflow_discovery.addListeners(self)
         core.call_when_ready(startup, ('openflow','openflow_discovery'))
         print "init over"
+
     def _handle_LinkEvent(self, event):
         if (event.added):
           return
@@ -251,18 +181,73 @@ class topoDiscovery(EventMixin):
         print 'switch2 %d' %l.dpid2
         print 'port2 %d' %l.port2
 
+    def _handle_PacketIn(self, event):
+
+      packet = event.parsed
+
+      #'dump', 'err', 'find', 'hdr', 'hwdst', 'hwlen', 'hwsrc', 'hwtype', 'msg', 'next', 'opcode', 'pack', 'parse', 'parsed', 'payload', 'pre_hdr', 'prev', 'protodst', 'protolen', 'protosrc', 'prototype', 'raw', 'set_payload', 'unpack', 'warn']
+
+      if isinstance(packet.payload, arp):
+        print "GET ARP request"
+        e = _handle_ARP_request(packet)
+        msg = of.ofp_packet_out()
+        msg.data = e.pack()
+        msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
+        msg.in_port = event.port
+        event.connection.send(msg)
+        
+      # elif isinstance(packet.next, ipv4):
+      #   print "ipv4", event.dpid
+
+    def _handle_ConnectionUp(self, event):
+      print("Switch %d connected" % event.dpid)
+      if event.dpid == 1:
+        print("pid = 1")
+        for key in sorted(l1_forwarding):
+          msg = of.ofp_flow_mod()
+          msg.match.dl_src = key[0]
+          msg.match.dl_dst = key[1]
+          port = l1_forwarding[key]
+          msg.actions.append(of.ofp_action_output(port = port))
+          print "add rule 1"
+          event.connection.send(msg)
+      elif event.dpid == 2:
+        for key in sorted(l2_forwarding):
+          msg = of.ofp_flow_mod()
+          msg.match.dl_src = key[0]
+          msg.match.dl_dst = key[1]
+          port = l2_forwarding[key]
+          msg.actions.append(of.ofp_action_output(port = port))
+          print "Add rule 2"
+          event.connection.send(msg)
+      elif event.dpid == 3:
+        for key in sorted(l3_forwarding):
+          msg = of.ofp_flow_mod()
+          msg.match.dl_src = key[0]
+          msg.match.dl_dst = key[1]
+          port = l3_forwarding[key]
+          msg.actions.append(of.ofp_action_output(port = port))
+          event.connection.send(msg)
+      elif event.dpid == 4:
+        for key in sorted(s4_forwarding):
+          msg = of.ofp_flow_mod()
+          msg.match.dl_dst = key
+          port = s4_forwarding[key]
+          msg.actions.append(of.ofp_action_output(port = port))
+          event.connection.send(msg)
+      elif event.dpid == 5:
+        for key in sorted(s5_forwarding):
+          msg = of.ofp_flow_mod()
+          msg.match.dl_dst = key
+          port = s5_forwarding[key]
+          msg.actions.append(of.ofp_action_output(port = port))
+          event.connection.send(msg)
+      else:
+        print("Error")
+
 def launch (disable_flood = False):
   global all_ports
   if disable_flood:
     all_ports = of.OFPP_ALL
   generate()
-  core.openflow.addListenerByName("ConnectionUp", _handle_ConnectionIn)
   core.registerNew(topoDiscovery)
-  core.openflow.addListenerByName("PacketIn", _handle_PacketIn)
-
-  #log.info("Pair-Learning switch running.")
-  
-
-
-
-
