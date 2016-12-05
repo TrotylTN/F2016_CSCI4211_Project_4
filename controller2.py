@@ -26,6 +26,9 @@ status = 3
 
 ARP_table = {}
 
+link_state = {4:[0, 1, 1, 1],
+              5:[0, 1, 1, 1]}
+
 def generate_arp_table():
   for i in range(1, 7):
     ARP_table[IPAddr(ipbase+str(i))] = EthAddr(macbase+str(i))
@@ -48,16 +51,21 @@ def generator(status, sid):
             forwardings[status][sid][(emptymac, macbase+str(hosts[i]))] = ((i + 3), priority2)
 
 def generate_tables():
-    for s in range(1, 4):
-        for switch in range(1, 6):
-            generator(s, switch)
+  for s in range(1, 4):
+    for switch in range(1, 6):
+      generator(s, switch)  
+
+def print_status():
+  global status
+  state = [status // 2 != 0, status % 2 != 0]
+  print "Status: S4, S5", state
 
 def _handle_ARP_request(packet):
   src_MAC = packet.payload.hwsrc
   src_IP = packet.payload.protosrc
   dst_MAC = packet.payload.hwdst
   dst_IP = packet.payload.protodst
-  print src_IP, "ASK" , dst_IP, "Old dst", dst_MAC 
+  print src_IP, "ASK" , dst_IP, "Old dst", dst_MAC
   dst_MAC = ARP_table[dst_IP]
   print "New mac", dst_MAC
   r = arp()
@@ -70,38 +78,73 @@ def _handle_ARP_request(packet):
   e.set_payload(r)
   return e
 
+def teach(status, sid):
+  k = sorted(forwardings[status][sid].keys())
+  con = core.openflow.getConnection(sid)
+  for t in k:
+    port, priority = forwardings[status][sid][t]
+    msg = of.ofp_flow_mod()
+    if (t[0] != emptymac):
+      msg.match.dl_src = EthAddr(t[0])
+    if (t[1] != emptymac):
+      msg.match.dl_dst = EthAddr(t[1])
+    msg.priority = priority
+    print("Src:", t[0], "Dest:", t[1], "port:", port)
+    msg.actions.append(of.ofp_action_output(port = port))
+    con.send(msg)
+
+def brainwash(sid): # clean up all entry of a switch
+    con = core.openflow.getConnection(sid)
+    msg = of.ofp_flow_mod(command=of.OFPFC_DELETE)
+    con.send(msg)
+
+def update_status(sid, flag):
+  global status
+  if flag:
+    if (sid==4):
+      status = status | 2
+    elif (sid==5):
+      status = status | 1
+  else:
+    if (sid==4):
+      status = status & 1
+    elif (sid==5):
+      status = status & 2
+
 class topoDiscovery(EventMixin):
 
     def __init__(self):
-        def startup():
-            core.openflow.addListeners(self, priority = 100)
-            core.openflow_discovery.addListeners(self)
-        core.call_when_ready(startup, ('openflow','openflow_discovery'))
-        print "init over"
+      def startup():
+        core.openflow.addListeners(self, priority = 100)
+        core.openflow_discovery.addListeners(self)
+      core.call_when_ready(startup, ('openflow','openflow_discovery'))
+      print "init over"
 
     def _handle_LinkEvent(self, event):
-        if (event.added):
-          return
-        l = event.link
-        sw1 = l.dpid1
-        sw2 = l.dpid2
-        pt1 = l.port1
-        pt2 = l.port2
-        # print dir(event.link.dpid1)
+      l = event.link
+      sw1 = l.dpid1
+      sw2 = l.dpid2
+      if (sw1 > sw2):
+        sw1, sw2 = sw2, sw1
+      pt1 = l.port1
+      pt2 = l.port2
 
-        con1 = core.openflow.getConnection(l.dpid1)
-        con2 = core.openflow.getConnection(l.dpid2)
-        msg = of.ofp_flow_mod(command=of.OFPFC_DELETE)
-        con1.send(msg)
-        con2.send(msg)
-        print("Send OK")
-
-        print 'link added is %s'%event.added
-        print 'link removed is %s' %event.removed
-        print 'switch1 %d' %l.dpid1
-        print 'port1 %d' %l.port1
-        print 'switch2 %d' %l.dpid2
-        print 'port2 %d' %l.port2
+      if (event.added):
+        link_state[sw2][sw1] = 1
+        if (sum(link_state[sw2]) == 3):
+          update_status(sw2, True)
+          print_status()
+          brainwash(sw1)
+          for sid in range(1, 4):
+            teach(status, sid)
+      elif (event.removed):
+        link_state[sw2][sw1] = 0
+        if (sum(link_state[sw2]) != 3):
+          update_status(sw2, False)
+          print_status()
+          brainwash(sw1)
+          for sid in range(1, 4):
+            teach(status, sid)
 
     def _handle_PacketIn(self, event):
 
@@ -115,25 +158,11 @@ class topoDiscovery(EventMixin):
         msg.actions.append(of.ofp_action_output(port = of.OFPP_IN_PORT))
         msg.in_port = event.port
         event.connection.send(msg)
-        
-      # elif isinstance(packet.next, ipv4):
-      #   print "ipv4", event.dpid
 
     def _handle_ConnectionUp(self, event):
       print("DPID:", event.dpid)
       sid = event.dpid
-      k = sorted(forwardings[3][sid].keys())
-      for t in k:
-        port, priority = forwardings[3][sid][t]
-        msg = of.ofp_flow_mod()
-        if (t[0] != emptymac):
-          msg.match.dl_src = EthAddr(t[0])
-        if (t[1] != emptymac):
-          msg.match.dl_dst = EthAddr(t[1])
-        msg.priority = priority
-        print("Src:", t[0], "Dest:", t[1], "port:", port)
-        msg.actions.append(of.ofp_action_output(port = port))
-        event.connection.send(msg)
+      teach(status, sid)
       print ''
 
 def launch (disable_flood = False):
