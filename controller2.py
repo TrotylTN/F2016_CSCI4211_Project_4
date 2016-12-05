@@ -65,9 +65,8 @@ def _handle_ARP_request(packet):
   src_IP = packet.payload.protosrc
   dst_MAC = packet.payload.hwdst
   dst_IP = packet.payload.protodst
-  print src_IP, "ASK" , dst_IP, "Old dst", dst_MAC
+  print src_IP, "asks for" , dst_IP
   dst_MAC = ARP_table[dst_IP]
-  print "New mac", dst_MAC
   r = arp()
   r.opcode = arp.REPLY
   r.hwdst = src_MAC
@@ -89,7 +88,6 @@ def teach(status, sid):
     if (t[1] != emptymac):
       msg.match.dl_dst = EthAddr(t[1])
     msg.priority = priority
-    print("Src:", t[0], "Dest:", t[1], "port:", port)
     msg.actions.append(of.ofp_action_output(port = port))
     con.send(msg)
 
@@ -120,7 +118,7 @@ class topoDiscovery(EventMixin):
       core.call_when_ready(startup, ('openflow','openflow_discovery'))
       print "init over"
 
-    def _handle_LinkEvent(self, event):
+    def _handle_LinkEvent(self, event, delayed=False):
       l = event.link
       sw1 = l.dpid1
       sw2 = l.dpid2
@@ -128,6 +126,13 @@ class topoDiscovery(EventMixin):
         sw1, sw2 = sw2, sw1
       pt1 = l.port1
       pt2 = l.port2
+
+      if (event.added):
+        print "Link UP between l%d and s%d" % (sw1, sw2)
+      elif (event.removed):
+        print "Link DOWN between l%d and s%d" % (sw1, sw2)
+      else:
+        return
 
       if (event.added):
         link_state[sw2][sw1] = 1
