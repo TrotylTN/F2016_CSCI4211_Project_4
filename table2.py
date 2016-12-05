@@ -26,9 +26,10 @@ def generator(status, sid):
             forwardings[status][sid][(macbase+str(hosts[i]), emptymac)] = (port, priority1)
             forwardings[status][sid][(emptymac, macbase+str(hosts[i]))] = ((i + 3), priority2)
 
-for s in range(1, 4):
-    for switch in range(1, 6):
-        generator(s, switch)
+def generate_tables():
+    for s in range(1, 4):
+        for switch in range(1, 6):
+            generator(s, switch)
 
 for s in range(1, 4):
     state = [s // 2 != 0, s % 2 != 0]
