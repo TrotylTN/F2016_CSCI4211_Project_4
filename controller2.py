@@ -8,11 +8,11 @@ from pox.lib.packet.ethernet import ethernet
 from pox.lib.revent import *  
 from pox.lib.recoco import Timer  
 from collections import defaultdict  
-from pox.openflow.discovery import Discovery
+from pox.openflow.discovery import *
 from pox.lib.util import dpid_to_str  
 import time
 
-forwardings = [[],
+forwardings = [[{}, {}, {}, {}, {}, {}],
                [{}, {}, {}, {}, {}, {}],
                [{}, {}, {}, {}, {}, {}],
                [{}, {}, {}, {}, {}, {}]]
@@ -93,6 +93,8 @@ def teach(status, sid):
 
 def brainwash(sid): # clean up all entry of a switch
     con = core.openflow.getConnection(sid)
+    if not con:
+      return
     msg = of.ofp_flow_mod(command=of.OFPFC_DELETE)
     con.send(msg)
 
@@ -108,6 +110,23 @@ def update_status(sid, flag):
       status = status & 1
     elif (sid==5):
       status = status & 2
+
+class myDiscovery(Discovery):
+  _timeout_check_period = 0.5
+
+  def _expire_links (self):
+    """
+    Remove apparently dead links
+    """
+    now = time.time()
+
+    expired = [link for link,timestamp in self.adjacency.iteritems()
+               if timestamp + self._link_timeout < now]
+    if expired:
+      for link in expired:
+        log.info('link timeout: %s', link)
+
+      self._delete_links(expired)
 
 class topoDiscovery(EventMixin):
 
@@ -131,8 +150,6 @@ class topoDiscovery(EventMixin):
         print "Link UP between l%d and s%d" % (sw1, sw2)
       elif (event.removed):
         print "Link DOWN between l%d and s%d" % (sw1, sw2)
-      else:
-        return
 
       if (event.added):
         link_state[sw2][sw1] = 1
@@ -176,4 +193,5 @@ def launch (disable_flood = False):
     all_ports = of.OFPP_ALL
   generate_tables()
   generate_arp_table()
+  core.registerNew(myDiscovery, link_timeout = 1)
   core.registerNew(topoDiscovery)
