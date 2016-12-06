@@ -139,8 +139,19 @@ def _handle_ConnectionUp(event):
   teach(status, sid)
 
 def _handle_PortStatus (event):
+  """
+  Link down/up will trigger this handler with both sides of a link
+  and we only run this handler when the switch is a spine switch.
+  """
   if event.dpid not in [4, 5]:
     return
+  """
+  Every link down/up with trigger this handler twice and the first 
+  time the state=0 and config=1. The second time for link down is 
+  state=1 and config=1 and for link up is state=0 and config=0. We
+  only handle the second call and use this feature to distinguish
+  between link down and link up.
+  """
   if (event.ofp.desc.state != event.ofp.desc.config):
     return
   if (not event.modified):
@@ -157,6 +168,7 @@ def _handle_PortStatus (event):
   if (flag):
     print "Link up"
     link_state[swid][port] = 1
+    # Turn a switch on iff all of its three links is up.
     if (sum(link_state[swid]) == 3):
       update_status(swid, True)
       print_status()
@@ -165,6 +177,7 @@ def _handle_PortStatus (event):
         teach(status, sid)
   else:
     print "Link down"
+    # Turn a switch off once one of its three links is down.
     link_state[swid][port] = 0
     if (sum(link_state[swid]) != 3):
       update_status(swid, False)
